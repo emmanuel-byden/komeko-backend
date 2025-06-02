@@ -4,3 +4,4 @@ sqlalchemy
 psycopg2-binary
 pysqlite3
 sqlalchemy
+python-dotenv
