@@ -1,6 +1,6 @@
 fastapi
 uvicorn
 sqlalchemy
-sqlite3
+psycopg2-binary
 pysqlite3
 sqlalchemy
