@@ -1,54 +1,56 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import sqlite3
+from sqlalchemy import create_engine, Column, Integer, String, Text
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
 # Initialize FastAPI app
 app = FastAPI()
 
-# CORS Middleware (allow frontend to communicate with backend)
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Replace "*" with your Netlify frontend URL for better security
+    allow_origins=["*"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # SQLite database file
-DATABASE = 'bookings.db'
+DATABASE_URL = "sqlite:///./bookings.db"
 
-# Initialize the database
-def init_db():
-    with sqlite3.connect(DATABASE) as conn:
-        cursor = conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS bookings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                email TEXT NOT NULL,
-                phone TEXT NOT NULL,
-                event_type TEXT NOT NULL,
-                event_date TEXT NOT NULL,
-                guests INTEGER NOT NULL,
-                special_requests TEXT
-            )
-        ''')
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS contacts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                email TEXT NOT NULL,
-                message TEXT NOT NULL
-            )
-        ''')
-        conn.commit()
+# SQLAlchemy setup
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
-# Call the database initialization function
-init_db()
+# Database models
+class Booking(Base):
+    __tablename__ = 'bookings'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    email = Column(String, nullable=False)
+    phone = Column(String, nullable=False)
+    event_type = Column(String, nullable=False)
+    event_date = Column(String, nullable=False)
+    guests = Column(Integer, nullable=False)
+    special_requests = Column(Text, nullable=True)
+
+class Contact(Base):
+    __tablename__ = 'contacts'
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    email = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+
+# Create the database tables
+Base.metadata.create_all(bind=engine)
 
 # Models for API endpoints
-class Booking(BaseModel):
+class BookingCreate(BaseModel):
     name: str
     email: str
     phone: str
@@ -57,83 +59,66 @@ class Booking(BaseModel):
     guests: int
     special_requests: str = None
 
-class Contact(BaseModel):
+class ContactCreate(BaseModel):
     name: str
     email: str
     message: str
 
+# Dependency to get the database session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
 # Booking endpoints
 @app.post("/bookings/")
-async def create_booking(booking: Booking):
-    try:
-        with sqlite3.connect(DATABASE) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO bookings (name, email, phone, event_type, event_date, guests, special_requests)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (booking.name, booking.email, booking.phone, booking.event_type, booking.event_date, booking.guests, booking.special_requests))
-            conn.commit()
-            return {"id": cursor.lastrowid, "message": "Booking created successfully"}
-    except sqlite3.Error as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+async def create_booking(booking: BookingCreate, db: SessionLocal = next(get_db())):
+    db_booking = Booking(**booking.dict())
+    db.add(db_booking)
+    db.commit()
+    db.refresh(db_booking)
+    return {"id": db_booking.id, "message": "Booking created successfully"}
 
 @app.get("/bookings/{booking_id}")
-async def read_booking(booking_id: int):
-    try:
-        with sqlite3.connect(DATABASE) as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT * FROM bookings WHERE id = ?', (booking_id,))
-            booking = cursor.fetchone()
-            if booking:
-                return {
-                    "id": booking[0],
-                    "name": booking[1],
-                    "email": booking[2],
-                    "phone": booking[3],
-                    "event_type": booking[4],
-                    "event_date": booking[5],
-                    "guests": booking[6],
-                    "special_requests": booking[7]
-                }
-            raise HTTPException(status_code=404, detail="Booking not found")
-    except sqlite3.Error as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+async def read_booking(booking_id: int, db: SessionLocal = next(get_db())):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if booking:
+        return {
+            "id": booking.id,
+            "name": booking.name,
+            "email": booking.email,
+            "phone": booking.phone,
+            "event_type": booking.event_type,
+            "event_date": booking.event_date,
+            "guests": booking.guests,
+            "special_requests": booking.special_requests
+        }
+    raise HTTPException(status_code=404, detail="Booking not found")
 
 @app.get("/bookings/")
-async def list_bookings():
-    try:
-        with sqlite3.connect(DATABASE) as conn:
-            cursor = conn.cursor()
-            cursor.execute('SELECT * FROM bookings')
-            bookings = cursor.fetchall()
-            return [
-                {
-                    "id": booking[0],
-                    "name": booking[1],
-                    "email": booking[2],
-                    "phone": booking[3],
-                    "event_type": booking[4],
-                    "event_date": booking[5],
-                    "guests": booking[6],
-                    "special_requests": booking[7]
-                }
-                for booking in bookings
-            ]
-    except sqlite3.Error as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {e}")
+async def list_bookings(db: SessionLocal = next(get_db())):
+    bookings = db.query(Booking).all()
+    return [
+        {
+            "id": booking.id,
+            "name": booking.name,
+            "email": booking.email,
+            "phone": booking.phone,
+            "event_type": booking.event_type,
+            "event_date": booking.event_date,
+            "guests": booking.guests,
+            "special_requests": booking.special_requests
+        }
+        for booking in bookings
+    ]
 
 # Contact endpoints
 @app.post("/contacts/")
-async def create_contact(contact: Contact):
-    try:
-        with sqlite3.connect(DATABASE) as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                INSERT INTO contacts (name, email, message)
-                VALUES (?, ?, ?)
-            ''', (contact.name, contact.email, contact.message))
-            conn.commit()
-            return {"id": cursor.lastrowid, "message": "Contact message submitted successfully"}
-    except sqlite3.Error as e:
-        raise HTTPException(status_code=500, detail=f"Database error: {e}")
-
+async def create_contact(contact: ContactCreate, db: SessionLocal = next(get_db())):
+    db_contact = Contact(**contact.dict())
+    db.add(db_contact)
+    db.commit()
+    db.refresh(db_contact)
+    return {"id": db_contact.id, "message": "Contact message submitted successfully"}
