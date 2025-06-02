@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, Text
@@ -11,17 +11,17 @@ app = FastAPI()
 # CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Replace "*" with your Netlify frontend URL for better security
+    allow_origins=["*"],  # Change this to your frontend URL for better security
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# PostgreSQL database URL
-DATABASE_URL = "postgresql://username:password@localhost/dbname"
+# SQLite database URL
+DATABASE_URL = "sqlite:///./bookings.db"
 
 # SQLAlchemy setup
-engine = create_engine(DATABASE_URL)
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -74,7 +74,7 @@ def get_db():
 
 # Booking endpoints
 @app.post("/bookings/")
-async def create_booking(booking: BookingCreate, db: SessionLocal = next(get_db())):
+async def create_booking(booking: BookingCreate, db: SessionLocal = Depends(get_db)):
     db_booking = Booking(**booking.dict())
     db.add(db_booking)
     db.commit()
@@ -82,7 +82,7 @@ async def create_booking(booking: BookingCreate, db: SessionLocal = next(get_db(
     return {"id": db_booking.id, "message": "Booking created successfully"}
 
 @app.get("/bookings/{booking_id}")
-async def read_booking(booking_id: int, db: SessionLocal = next(get_db())):
+async def read_booking(booking_id: int, db: SessionLocal = Depends(get_db)):
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if booking:
         return {
@@ -98,7 +98,7 @@ async def read_booking(booking_id: int, db: SessionLocal = next(get_db())):
     raise HTTPException(status_code=404, detail="Booking not found")
 
 @app.get("/bookings/")
-async def list_bookings(db: SessionLocal = next(get_db())):
+async def list_bookings(db: SessionLocal = Depends(get_db)):
     bookings = db.query(Booking).all()
     return [
         {
@@ -116,7 +116,7 @@ async def list_bookings(db: SessionLocal = next(get_db())):
 
 # Contact endpoints
 @app.post("/contacts/")
-async def create_contact(contact: ContactCreate, db: SessionLocal = next(get_db())):
+async def create_contact(contact: ContactCreate, db: SessionLocal = Depends(get_db)):
     db_contact = Contact(**contact.dict())
     db.add(db_contact)
     db.commit()
