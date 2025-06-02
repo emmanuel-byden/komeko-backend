@@ -11,14 +11,14 @@ app = FastAPI()
 # CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
+    allow_origins=["*"],  # Replace "*" with your Netlify frontend URL for better security
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# SQLite database file
-DATABASE_URL = "sqlite:///./bookings.db"
+# PostgreSQL database URL
+DATABASE_URL = "postgresql://username:password@localhost/dbname"
 
 # SQLAlchemy setup
 engine = create_engine(DATABASE_URL)
