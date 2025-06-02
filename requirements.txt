@@ -3,3 +3,4 @@ uvicorn
 sqlalchemy
 sqlite3
 pysqlite3
+sqlalchemy
