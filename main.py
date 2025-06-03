@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, constr, validator
-from sqlalchemy import create_engine, Column, Integer, String, Text
+from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import re
@@ -38,6 +38,9 @@ class Booking(Base):
     event_date = Column(String, nullable=False)
     guests = Column(Integer, nullable=False)
     special_requests = Column(Text, nullable=True)
+    event_setup = Column(Boolean, default=False)  # New field
+    staff_setup = Column(Boolean, default=False)  # New field
+    staff_ready = Column(Boolean, default=False)  # New field
 
 class Contact(Base):
     __tablename__ = 'contacts'
@@ -59,6 +62,9 @@ class BookingCreate(BaseModel):
     event_date: str
     guests: int
     special_requests: str = None
+    event_setup: bool = False  # New field
+    staff_setup: bool = False  # New field
+    staff_ready: bool = False  # New field
 
     @validator('phone')
     def validate_phone(cls, v):
@@ -95,7 +101,10 @@ async def create_booking(booking: BookingCreate, db: SessionLocal = Depends(get_
             event_type=booking.event_type,
             event_date=booking.event_date,
             guests=booking.guests,
-            special_requests=booking.special_requests
+            special_requests=booking.special_requests,
+            event_setup=booking.event_setup,
+            staff_setup=booking.staff_setup,
+            staff_ready=booking.staff_ready
         )
         db.add(db_booking)
         db.commit()
@@ -117,7 +126,10 @@ async def read_booking(booking_id: int, db: SessionLocal = Depends(get_db)):
             "event_type": booking.event_type,
             "event_date": booking.event_date,
             "guests": booking.guests,
-            "special_requests": booking.special_requests
+            "special_requests": booking.special_requests,
+            "event_setup": booking.event_setup,
+            "staff_setup": booking.staff_setup,
+            "staff_ready": booking.staff_ready
         }
     raise HTTPException(status_code=404, detail="Booking not found")
 
@@ -133,10 +145,31 @@ async def list_bookings(db: SessionLocal = Depends(get_db)):
             "event_type": booking.event_type,
             "event_date": booking.event_date,
             "guests": booking.guests,
-            "special_requests": booking.special_requests
+            "special_requests": booking.special_requests,
+            "event_setup": booking.event_setup,
+            "staff_setup": booking.staff_setup,
+            "staff_ready": booking.staff_ready
         }
         for booking in bookings
     ]
+
+# Endpoint to update booking status
+@app.put("/bookings/{booking_id}")
+async def update_booking_status(booking_id: int, status: dict, db: SessionLocal = Depends(get_db)):
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    
+    if 'event_setup' in status:
+        booking.event_setup = status['event_setup']
+    if 'staff_setup' in status:
+        booking.staff_setup = status['staff_setup']
+    if 'staff_ready' in status:
+        booking.staff_ready = status['staff_ready']
+
+    db.commit()
+    db.refresh(booking)
+    return {"message": "Booking status updated successfully"}
 
 # Contact endpoints
 @app.post("/contacts/")
