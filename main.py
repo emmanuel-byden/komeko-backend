@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, Text
 from sqlalchemy.ext.declarative import declarative_base
@@ -71,6 +72,16 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# Root endpoint
+@app.get("/")
+async def read_root():
+    return {"message": "Welcome to the FastAPI Booking API!"}
+
+# Favicon endpoint
+@app.get("/favicon.ico")
+async def get_favicon():
+    return FileResponse(None)  # Update the path as needed
 
 # Booking endpoints
 @app.post("/bookings/")
