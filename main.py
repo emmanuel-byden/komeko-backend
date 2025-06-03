@@ -1,8 +1,8 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.future import select
 
 DATABASE_URL = "sqlite:///./test.db"  # Change to your database URL
@@ -56,7 +56,7 @@ class ContactOut(ContactCreate):
     id: int
 
 # Dependency to get the database session
-def get_db():
+def get_db() -> Session:
     db = SessionLocal()
     try:
         yield db
@@ -65,25 +65,25 @@ def get_db():
 
 # Booking routes
 @app.post("/bookings/", response_model=BookingOut)
-async def create_booking(booking: BookingCreate, db: SessionLocal = next(get_db())):
+async def create_booking(booking: BookingCreate, db: Session = Depends(get_db)):
     db_booking = Booking(**booking.dict())
     db.add(db_booking)
     db.commit()
     db.refresh(db_booking)
-    return db_booking
+    return BookingOut(**db_booking.__dict__)
 
 @app.get("/bookings/{booking_id}", response_model=BookingOut)
-async def get_booking(booking_id: int, db: SessionLocal = next(get_db())):
+async def get_booking(booking_id: int, db: Session = Depends(get_db)):
     booking = db.execute(select(Booking).where(Booking.id == booking_id)).scalars().first()
     if booking is None:
         raise HTTPException(status_code=404, detail="Booking not found")
-    return booking
+    return BookingOut(**booking.__dict__)
 
 # Contact routes
 @app.post("/contacts/", response_model=ContactOut)
-async def create_contact(contact: ContactCreate, db: SessionLocal = next(get_db())):
+async def create_contact(contact: ContactCreate, db: Session = Depends(get_db)):
     db_contact = Contact(**contact.dict())
     db.add(db_contact)
     db.commit()
     db.refresh(db_contact)
-    return db_contact
+    return ContactOut(**db_contact.__dict__)
