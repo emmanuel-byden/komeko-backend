@@ -1,10 +1,10 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, EmailStr, constr
+from pydantic import BaseModel, EmailStr, constr, validator
 from sqlalchemy import create_engine, Column, Integer, String, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-import re  # Import re for regular expressions
+import re
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -54,11 +54,17 @@ Base.metadata.create_all(bind=engine)
 class BookingCreate(BaseModel):
     name: str
     email: EmailStr
-    phone: constr(regex=r'^\+?[1-9]\d{1,14}$')  # Phone number regex validation
+    phone: str
     event_type: str
     event_date: str
     guests: int
     special_requests: str = None
+
+    @validator('phone')
+    def validate_phone(cls, v):
+        if not re.match(r'^\+?[1-9]\d{1,14}$', v):
+            raise ValueError('Invalid phone number format')
+        return v
 
 class ContactCreate(BaseModel):
     name: str
