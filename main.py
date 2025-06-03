@@ -1,81 +1,59 @@
-from fastapi import FastAPI, HTTPException, Depends
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, EmailStr, constr, validator
-from sqlalchemy import create_engine, Column, Integer, String, Text, Boolean
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import create_engine, Column, Integer, String
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-import re
+from sqlalchemy.future import select
 
-# Initialize FastAPI app
-app = FastAPI()
-
-# CORS Middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Change this to your frontend URL for better security
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# SQLite database URL
-DATABASE_URL = "sqlite:///./bookings.db"
-
-# SQLAlchemy setup
+DATABASE_URL = "sqlite:///./test.db"  # Change to your database URL
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# Database models
+app = FastAPI()
+
+# Define the Booking model
 class Booking(Base):
-    __tablename__ = 'bookings'
-    
+    __tablename__ = "bookings"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    email = Column(String, nullable=False)
-    phone = Column(String, nullable=False)
-    event_type = Column(String, nullable=False)
-    event_date = Column(String, nullable=False)
-    guests = Column(Integer, nullable=False)
-    special_requests = Column(Text, nullable=True)
-    event_setup = Column(Boolean, default=False)  # New field
-    staff_setup = Column(Boolean, default=False)  # New field
-    staff_ready = Column(Boolean, default=False)  # New field
+    name = Column(String, index=True)
+    email = Column(String, index=True)
+    phone = Column(String)
+    event_type = Column(String)
+    event_date = Column(String)  # Store as string in YYYY-MM-DD format
+    guests = Column(Integer)
+    special_requests = Column(String, nullable=True)
 
+# Define the Contact model
 class Contact(Base):
-    __tablename__ = 'contacts'
-    
+    __tablename__ = "contacts"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    email = Column(String, nullable=False)
-    message = Column(Text, nullable=False)
+    name = Column(String, index=True)
+    email = Column(String, index=True)
+    message = Column(String)
 
-# Create the database tables
 Base.metadata.create_all(bind=engine)
 
-# Models for API endpoints
+# Pydantic model for Booking and Contact
 class BookingCreate(BaseModel):
     name: str
-    email: EmailStr
+    email: str
     phone: str
     event_type: str
     event_date: str
     guests: int
     special_requests: str = None
-    event_setup: bool = False  # New field
-    staff_setup: bool = False  # New field
-    staff_ready: bool = False  # New field
 
-    @validator('phone')
-    def validate_phone(cls, v):
-        if not re.match(r'^\+?[1-9]\d{1,14}$', v):
-            raise ValueError('Invalid phone number format')
-        return v
+class BookingOut(BookingCreate):
+    id: int
 
 class ContactCreate(BaseModel):
     name: str
-    email: EmailStr
+    email: str
     message: str
+
+class ContactOut(ContactCreate):
+    id: int
 
 # Dependency to get the database session
 def get_db():
@@ -85,114 +63,27 @@ def get_db():
     finally:
         db.close()
 
-# Root endpoint
-@app.get("/")
-async def read_root():
-    return {"message": "Welcome to the FastAPI Booking API!"}
-
-# Booking endpoints
-@app.post("/bookings/")
-async def create_booking(booking: BookingCreate, db: SessionLocal = Depends(get_db)):
-    try:
-        db_booking = Booking(
-            name=booking.name,
-            email=booking.email,
-            phone=booking.phone,
-            event_type=booking.event_type,
-            event_date=booking.event_date,
-            guests=booking.guests,
-            special_requests=booking.special_requests,
-            event_setup=booking.event_setup,
-            staff_setup=booking.staff_setup,
-            staff_ready=booking.staff_ready
-        )
-        db.add(db_booking)
-        db.commit()
-        db.refresh(db_booking)
-        return {"id": db_booking.id, "message": "Booking created successfully"}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-
-@app.get("/bookings/{booking_id}")
-async def read_booking(booking_id: int, db: SessionLocal = Depends(get_db)):
-    booking = db.query(Booking).filter(Booking.id == booking_id).first()
-    if booking:
-        return {
-            "id": booking.id,
-            "name": booking.name,
-            "email": booking.email,
-            "phone": booking.phone,
-            "event_type": booking.event_type,
-            "event_date": booking.event_date,
-            "guests": booking.guests,
-            "special_requests": booking.special_requests,
-            "event_setup": booking.event_setup,
-            "staff_setup": booking.staff_setup,
-            "staff_ready": booking.staff_ready
-        }
-    raise HTTPException(status_code=404, detail="Booking not found")
-
-@app.get("/bookings/")
-async def list_bookings(db: SessionLocal = Depends(get_db)):
-    bookings = db.query(Booking).all()
-    return [
-        {
-            "id": booking.id,
-            "name": booking.name,
-            "email": booking.email,
-            "phone": booking.phone,
-            "event_type": booking.event_type,
-            "event_date": booking.event_date,
-            "guests": booking.guests,
-            "special_requests": booking.special_requests,
-            "event_setup": booking.event_setup,
-            "staff_setup": booking.staff_setup,
-            "staff_ready": booking.staff_ready
-        }
-        for booking in bookings
-    ]
-
-# Endpoint to update booking status
-@app.put("/bookings/{booking_id}")
-async def update_booking_status(booking_id: int, status: dict, db: SessionLocal = Depends(get_db)):
-    booking = db.query(Booking).filter(Booking.id == booking_id).first()
-    if not booking:
-        raise HTTPException(status_code=404, detail="Booking not found")
-    
-    if 'event_setup' in status:
-        booking.event_setup = status['event_setup']
-    if 'staff_setup' in status:
-        booking.staff_setup = status['staff_setup']
-    if 'staff_ready' in status:
-        booking.staff_ready = status['staff_ready']
-
+# Booking routes
+@app.post("/bookings/", response_model=BookingOut)
+async def create_booking(booking: BookingCreate, db: SessionLocal = next(get_db())):
+    db_booking = Booking(**booking.dict())
+    db.add(db_booking)
     db.commit()
-    db.refresh(booking)
-    return {"message": "Booking status updated successfully"}
+    db.refresh(db_booking)
+    return db_booking
 
-# Contact endpoints
-@app.post("/contacts/")
-async def create_contact(contact: ContactCreate, db: SessionLocal = Depends(get_db)):
-    try:
-        db_contact = Contact(**contact.dict())
-        db.add(db_contact)
-        db.commit()
-        db.refresh(db_contact)
-        return {"id": db_contact.id, "message": "Contact message submitted successfully"}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
+@app.get("/bookings/{booking_id}", response_model=BookingOut)
+async def get_booking(booking_id: int, db: SessionLocal = next(get_db())):
+    booking = db.execute(select(Booking).where(Booking.id == booking_id)).scalars().first()
+    if booking is None:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    return booking
 
-@app.get("/contacts/")
-async def list_contacts(db: SessionLocal = Depends(get_db)):
-    contacts = db.query(Contact).all()
-    return [
-        {
-            "id": contact.id,
-            "name": contact.name,
-            "email": contact.email,
-            "message": contact.message
-        }
-        for contact in contacts
-    ]
+# Contact routes
+@app.post("/contacts/", response_model=ContactOut)
+async def create_contact(contact: ContactCreate, db: SessionLocal = next(get_db())):
+    db_contact = Contact(**contact.dict())
+    db.add(db_contact)
+    db.commit()
+    db.refresh(db_contact)
+    return db_contact
