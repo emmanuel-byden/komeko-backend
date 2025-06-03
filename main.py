@@ -1,10 +1,10 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, EmailStr, constr # type: ignore
+from pydantic import BaseModel, EmailStr, constr
 from sqlalchemy import create_engine, Column, Integer, String, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.orm import Session
+import re  # Import re for regular expressions
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -54,7 +54,7 @@ Base.metadata.create_all(bind=engine)
 class BookingCreate(BaseModel):
     name: str
     email: EmailStr
-    phone: constr  # type: ignore  # Adjust length as needed
+    phone: constr(regex=r'^\+?[1-9]\d{1,14}$')  # Phone number regex validation
     event_type: str
     event_date: str
     guests: int
@@ -80,7 +80,7 @@ async def read_root():
 
 # Booking endpoints
 @app.post("/bookings/")
-async def create_booking(booking: BookingCreate, db: Session = Depends(get_db)): # type: ignore
+async def create_booking(booking: BookingCreate, db: SessionLocal = Depends(get_db)):
     try:
         db_booking = Booking(
             name=booking.name,
@@ -100,7 +100,7 @@ async def create_booking(booking: BookingCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/bookings/{booking_id}")
-async def read_booking(booking_id: int, db: Session = Depends(get_db)):
+async def read_booking(booking_id: int, db: SessionLocal = Depends(get_db)):
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     if booking:
         return {
@@ -116,7 +116,7 @@ async def read_booking(booking_id: int, db: Session = Depends(get_db)):
     raise HTTPException(status_code=404, detail="Booking not found")
 
 @app.get("/bookings/")
-async def list_bookings(db: Session = Depends(get_db)):
+async def list_bookings(db: SessionLocal = Depends(get_db)):
     bookings = db.query(Booking).all()
     return [
         {
@@ -134,7 +134,7 @@ async def list_bookings(db: Session = Depends(get_db)):
 
 # Contact endpoints
 @app.post("/contacts/")
-async def create_contact(contact: ContactCreate, db: Session = Depends(get_db)):
+async def create_contact(contact: ContactCreate, db: SessionLocal = Depends(get_db)):
     try:
         db_contact = Contact(**contact.dict())
         db.add(db_contact)
@@ -146,8 +146,7 @@ async def create_contact(contact: ContactCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/contacts/")
-
-async def list_contacts(db: Session = Depends(get_db)):
+async def list_contacts(db: SessionLocal = Depends(get_db)):
     contacts = db.query(Contact).all()
     return [
         {
