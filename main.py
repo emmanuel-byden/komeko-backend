@@ -87,7 +87,15 @@ async def get_favicon():
 @app.post("/bookings/")
 async def create_booking(booking: BookingCreate, db: SessionLocal = Depends(get_db)):
     try:
-        db_booking = Booking(**booking.dict())
+        db_booking = Booking(
+            name=booking.name,
+            email=booking.email,
+            phone=booking.phone,
+            event_type=booking.event_type,
+            event_date=booking.event_date,
+            guests=booking.guests,
+            special_requests=booking.special_requests
+        )
         db.add(db_booking)
         db.commit()
         db.refresh(db_booking)
